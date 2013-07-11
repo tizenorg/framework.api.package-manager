@@ -675,7 +675,6 @@ int package_manager_set_event_cb(package_manager_h manager,
 				 package_manager_event_cb callback,
 				 void *user_data)
 {
-	int ret = 0;
 	if (package_manager_valiate_handle(manager)) {
 		return
 		    package_manager_error
@@ -686,9 +685,7 @@ int package_manager_set_event_cb(package_manager_h manager,
 	manager->event_cb = callback;
 	manager->user_data = user_data;
 
-	ret =
-	    pkgmgr_client_listen_status(manager->pc, global_event_handler,
-					manager);
+    pkgmgr_client_listen_status(manager->pc, global_event_handler, manager);
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
