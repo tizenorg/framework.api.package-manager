@@ -1,6 +1,6 @@
 Name:       capi-appfw-package-manager
 Summary:    Package Manager API
-Version: 0.0.28
+Version: 0.0.29
 Release:    1
 Group:      API
 License:    Apache-2.0

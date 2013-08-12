@@ -581,6 +581,68 @@ int package_manager_destroy(package_manager_h manager)
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
+static int __add_event(event_info ** head, int req_id,
+			    package_manager_event_type_e event_type,
+			    package_manager_event_state_e event_state)
+{
+	event_info *evt_info;
+
+	evt_info = (event_info *) calloc(1, sizeof(event_info));
+	if (evt_info == NULL) {
+		_LOGD("calloc failed");
+		return -1;
+	}
+	evt_info->req_id = req_id;
+	evt_info->event_type = event_type;
+	evt_info->next = NULL;
+
+	*head = evt_info;
+
+	return 0;
+}
+
+static int __find_event(event_info ** head, int req_id,
+			     package_manager_event_type_e * event_type,
+			     package_manager_event_state_e * event_state)
+{
+	event_info *tmp;
+
+	tmp = *head;
+
+	if (tmp == NULL) {
+		_LOGE("tmp is NULL");
+		return -1;
+	}
+
+	*event_type = tmp->event_type;
+	return 0;
+}
+
+static int __update_event(event_info ** head, int req_id,
+			       package_manager_event_type_e event_type,
+			       package_manager_event_state_e event_state)
+{
+	package_manager_event_type_e evt_type;
+	package_manager_event_state_e evt_state;
+	event_info *tmp;
+
+	if (__find_event_info(head, req_id, &evt_type, &evt_state) != 0)
+		__add_event_info(head, req_id, event_type, event_state);
+	else {
+		tmp = *head;
+
+		if (tmp == NULL) {
+			_LOGE("tmp is NULL");
+			return -1;
+		}
+
+		tmp->event_type = event_type;
+		return 0;
+	}
+
+	return -1;
+}
+
 static int global_event_handler(int req_id, const char *pkg_type,
 				const char *pkg_name, const char *key,
 				const char *val, const void *pmsg, void *data)
@@ -598,7 +660,7 @@ static int global_event_handler(int req_id, const char *pkg_type,
 		if (ret != PACKAGE_MANAGER_ERROR_NONE)
 			return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
 
-		__add_event_info(&(manager->head), req_id, event_type,
+		__add_event(&(manager->head), req_id, event_type,
 				 PACKAGE_MANAGER_EVENT_STATE_STARTED);
 
 		if (manager->event_cb)
@@ -609,10 +671,10 @@ static int global_event_handler(int req_id, const char *pkg_type,
 
 	} else if (strcasecmp(key, "install_percent") == 0
 		   || strcasecmp(key, "progress_percent") == 0) {
-		if (__find_event_info
+		if (__find_event
 		    (&(manager->head), req_id, &event_type,
 		     &event_state) == 0) {
-			__update_event_info(&(manager->head), req_id,
+			__update_event(&(manager->head), req_id,
 					    event_type,
 					    PACKAGE_MANAGER_EVENT_STATE_PROCESSING);
 			if (manager->event_cb)
@@ -626,10 +688,10 @@ static int global_event_handler(int req_id, const char *pkg_type,
 
 	} else if (strcasecmp(key, "error") == 0) {
 		if (strcasecmp(key, "0") != 0) {
-			if (__find_event_info
+			if (__find_event
 			    (&(manager->head), req_id, &event_type,
 			     &event_state) == 0) {
-				__update_event_info(&(manager->head), req_id,
+				__update_event(&(manager->head), req_id,
 						    event_type,
 						    PACKAGE_MANAGER_EVENT_STATE_FAILED);
 			}
@@ -644,7 +706,7 @@ static int global_event_handler(int req_id, const char *pkg_type,
 
 		}
 	} else if (strcasecmp(key, "end") == 0) {
-		if (__find_event_info
+		if (__find_event
 		    (&(manager->head), req_id, &event_type,
 		     &event_state) == 0) {
 			if (event_state != PACKAGE_MANAGER_EVENT_STATE_FAILED) {
