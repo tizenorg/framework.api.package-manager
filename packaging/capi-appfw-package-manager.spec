@@ -42,6 +42,9 @@ make %{?jobs:-j%jobs}
 rm -rf %{buildroot}
 %make_install
 
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/%{name}
+
 %post -p /sbin/ldconfig
 
 %postun -p /sbin/ldconfig
@@ -51,6 +54,7 @@ rm -rf %{buildroot}
 %manifest capi-appfw-package-manager.manifest
 %{_libdir}/libcapi-appfw-package-manager.so.*
 %{_bindir}/pkgmgr_tool
+/usr/share/license/%{name}
 
 %files devel
 %{_includedir}/appfw/package_manager.h
