@@ -492,7 +492,7 @@ int package_manager_request_uninstall(package_manager_request_h request,
 	int request_id = 0;
 	request->pkg_name = name;
 	request_id = pkgmgr_client_uninstall(request->pc, request->pkg_type,
-					     request->pkg_name, PM_DEFAULT,
+					     request->pkg_name, request->mode,
 					     request_event_handler, request);
 
 	if (request_id < 0)
