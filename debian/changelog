@@ -1,0 +1,8 @@
+capi-appfw-package-manager (0.0.1-1) unstable; urgency=low
+
+  * Initial upload
+  * Git: slp-source.sec.samsung.net:slp/api/package-manager
+  * Tag: capi-appfw-package-manager_0.0.1-1
+
+ -- Sewook Park <sewook7.park@samsung.com>  Thu, 04 Aug 2011 18:49:46 +0900
+

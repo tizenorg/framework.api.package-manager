@@ -1,0 +1,22 @@
+
+Source: capi-appfw-package-manager
+Section: libs
+Priority: extra
+Maintainer: Woongsuk Cho <ws77.cho@samsung.com>, junghyuk park <junghyuk.park@samsung.com>
+Build-Depends: debhelper (>= 5), dlog-dev, capi-base-common-dev, libail-0-dev, libpkgmgr-client-dev, libglib2.0-dev
+
+Package: capi-appfw-package-manager
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: The Application Manager API provides functions to get information about running applications.
+
+Package: capi-appfw-package-manager-dev
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, capi-appfw-package-manager (= ${Source-Version}), capi-base-common-dev
+Description: The Application Manager API provides functions to get information about running applications. (DEV)
+
+Package: capi-appfw-package-manager-dbg
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, capi-appfw-package-manager (= ${Source-Version})
+Description: The Application Manager API provides functions to get information about running applications. (DBG)
+
