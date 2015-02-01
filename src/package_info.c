@@ -26,7 +26,6 @@
 
 #include <package_info.h>
 #include <package_manager.h>
-#include "package_manager_private.h"
 
 
 #ifdef LOG_TAG
@@ -149,6 +148,26 @@ int package_info_foreach_package_info(package_manager_package_info_cb callback, 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
+int package_info_filter_foreach_package_info(pkgmgrinfo_pkginfo_filter_h handle, package_manager_package_info_cb callback, void *user_data)
+{
+	foreach_pkg_context_s foreach_pkg_context = {
+		.callback = callback,
+		.user_data = user_data,
+	};
+	int ret = 0;
+
+	if ((handle == NULL) || (callback == NULL))
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	ret = pkgmgrinfo_pkginfo_filter_foreach_pkginfo(handle, package_info_foreach_package_info_cb, &foreach_pkg_context);
+	if (ret < 0) {
+		return PACKAGE_MANAGER_ERROR_IO_ERROR;
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
 
 static int package_info_foreach_app_cb (const pkgmgrinfo_appinfo_h handle, void *user_data)
 {
@@ -172,7 +191,12 @@ static int package_info_foreach_app_cb (const pkgmgrinfo_appinfo_h handle, void 
 		return PKGMGR_R_ERROR;
 	}
 
-	foreach_app_context->callback(comp, appid, foreach_app_context->user_data);
+	ret = foreach_app_context->callback(comp, appid, foreach_app_context->user_data);
+	if (!ret)
+	{
+		package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+		return PKGMGR_R_ERROR;
+	}
 
 	return PKGMGR_R_OK;
 }
@@ -220,6 +244,8 @@ int package_info_destroy(package_info_h package_info)
 	pkgmgrinfo_pkginfo_destroy_pkginfo(package_info->pkgmgrinfo_pkginfo);
 
 	free(package_info);
+
+	package_info = NULL;
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
@@ -606,3 +632,16 @@ int package_info_foreach_cert_info(package_info_h package_info, package_info_cer
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
+int package_info_foreach_privilege_info(package_info_h package_info, package_info_privilege_info_cb callback, void *user_data)
+{
+	int ret = 0;
+
+	if (package_info == NULL || callback == NULL)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	ret = pkgmgrinfo_pkginfo_foreach_privilege(package_info->pkgmgrinfo_pkginfo, callback, user_data);
+
+	return ret;
+}

@@ -64,7 +64,7 @@ static void utc_ApplicationFW_package_info_foreach_app_from_package_func_01(void
 	char *pkgid = "com.samsung.email";
 	package_info_h package_info;
 	
-	package_manager_get_package_info(pkgid, &package_info);
+	package_info_create(pkgid, &package_info);
 
 	ret = package_info_foreach_app_from_package(package_info, PACKAGE_INFO_UIAPP, info_cb, NULL);
 	if (ret != 0) {

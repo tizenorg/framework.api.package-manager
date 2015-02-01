@@ -95,6 +95,12 @@ static int _get_packageinfo(const char *package)
 
 	package_info_foreach_cert_info(package_info, _cert_info_cb, NULL);
 
+	free(pkg);
+	free(label);
+	free(icon);
+	free(version);
+	free(type);
+
 	ret = package_info_destroy(package_info);
 	if (ret != PACKAGE_MANAGER_ERROR_NONE) {
 		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;

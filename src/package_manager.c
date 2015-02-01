@@ -16,13 +16,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <glib.h>
 #include <dlog.h>
 
 #include <package-manager.h>
 #include <package_manager.h>
-#include <package_manager_private.h>
 #include <pkgmgr-info.h>
 
+#include <package_manager_internal.h>
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -32,6 +33,8 @@
 
 #define _LOGE(fmt, arg...) LOGE(fmt,##arg)
 #define _LOGD(fmt, arg...) LOGD(fmt, ##arg)
+
+static GHashTable *__cb_table = NULL;
 
 typedef struct _event_info {
 	int req_id;
@@ -63,6 +66,10 @@ struct package_manager_request_s {
 	void *user_data;
 };
 
+struct package_manager_filter_s {
+	pkgmgrinfo_pkginfo_filter_h pkgmgrinfo_pkginfo_filter;
+};
+
 static int package_manager_request_new_id()
 {
 	static int request_handle_id = 0;
@@ -81,15 +88,18 @@ static const char *package_manager_error_to_string(package_manager_error_e
 	switch (error) {
 	case PACKAGE_MANAGER_ERROR_NONE:
 		return "NONE";
-
 	case PACKAGE_MANAGER_ERROR_INVALID_PARAMETER:
 		return "INVALID_PARAMETER";
-
 	case PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY:
 		return "OUT_OF_MEMORY";
-
 	case PACKAGE_MANAGER_ERROR_IO_ERROR:
 		return "IO_ERROR";
+	case PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE:
+		return "NO_SUCH_PACKAGE";
+	case PACKAGE_MANAGER_ERROR_PERMISSION_DENIED:
+		return "PERMISSION_DENIED";
+	case PACKAGE_MANAGER_ERROR_SYSTEM_ERROR:
+		return "SEVERE_SYSTEM_ERROR";
 	default:
 		return "UNKNOWN";
 	}
@@ -147,7 +157,7 @@ int package_manager_request_create(package_manager_request_h * request)
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
-static int package_manager_client_valiate_handle(package_manager_request_h
+static int package_manager_client_validate_handle(package_manager_request_h
 						 request)
 {
 	if (request == NULL || request->pc == NULL) {
@@ -159,7 +169,7 @@ static int package_manager_client_valiate_handle(package_manager_request_h
 
 int package_manager_client_destroy(package_manager_request_h request)
 {
-	if (package_manager_client_valiate_handle(request)) {
+	if (package_manager_client_validate_handle(request)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -175,7 +185,7 @@ int package_manager_client_destroy(package_manager_request_h request)
 
 int package_manager_request_destroy(package_manager_request_h request)
 {
-	if (package_manager_client_valiate_handle(request)) {
+	if (package_manager_client_validate_handle(request)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -193,7 +203,15 @@ int package_manager_request_set_event_cb(package_manager_request_h request,
 					 package_manager_request_event_cb
 					 callback, void *user_data)
 {
-	if (package_manager_client_valiate_handle(request)) {
+	int retval;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	if (package_manager_client_validate_handle(request)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -209,6 +227,10 @@ int package_manager_request_set_event_cb(package_manager_request_h request,
 int package_manager_request_unset_event_cb(package_manager_request_h request)
 {
 	// TODO: Please implement this function.
+	if (package_manager_client_validate_handle(request)) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
@@ -216,7 +238,7 @@ int package_manager_request_unset_event_cb(package_manager_request_h request)
 int package_manager_request_set_type(package_manager_request_h request,
 				     const char *pkg_type)
 {
-	if (package_manager_client_valiate_handle(request)) {
+	if (package_manager_client_validate_handle(request)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -231,7 +253,7 @@ int package_manager_request_set_type(package_manager_request_h request,
 int package_manager_request_set_mode(package_manager_request_h request,
 				     package_manager_request_mode_e mode)
 {
-	if (package_manager_client_valiate_handle(request)) {
+	if (package_manager_client_validate_handle(request)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -471,6 +493,13 @@ static int request_event_handler(int req_id, const char *pkg_type,
 int package_manager_request_install(package_manager_request_h request,
 				    const char *path, int *id)
 {
+	if (package_manager_client_validate_handle(request)) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+	if (path == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	int request_id = 0;
 	request->pkg_path = path;
 	request_id = pkgmgr_client_install(request->pc, request->pkg_type, NULL,
@@ -478,8 +507,19 @@ int package_manager_request_install(package_manager_request_h request,
 					   request->mode, request_event_handler,
 					   request);
 
-	if (request_id < 0)
-		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
+	if (request_id == PKGMGR_R_EINVAL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ENOPKG) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ENOMEM) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_EIO) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_EPRIV) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ESYSTEM || request_id == PKGMGR_R_ECOMM || request_id == PKGMGR_R_ERROR) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
 
 	*id = request_id;
 
@@ -489,14 +529,32 @@ int package_manager_request_install(package_manager_request_h request,
 int package_manager_request_uninstall(package_manager_request_h request,
 				      const char *name, int *id)
 {
+	if (package_manager_client_validate_handle(request)) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+	if (name == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	int request_id = 0;
 	request->pkg_name = name;
 	request_id = pkgmgr_client_uninstall(request->pc, request->pkg_type,
 					     request->pkg_name, request->mode,
 					     request_event_handler, request);
 
-	if (request_id < 0)
-		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
+	if (request_id == PKGMGR_R_EINVAL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ENOPKG) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ENOMEM) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_EIO) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_EPRIV) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__, NULL);
+	} else if (request_id == PKGMGR_R_ESYSTEM || request_id == PKGMGR_R_ECOMM || request_id == PKGMGR_R_ERROR) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
 
 	*id = request_id;
 
@@ -506,21 +564,43 @@ int package_manager_request_uninstall(package_manager_request_h request,
 int package_manager_request_move(package_manager_request_h request,
 				    const char *name, package_manager_move_type_e move_type)
 {
+	if (package_manager_client_validate_handle(request)) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+	if (name == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	int ret = 0;
 	request->pkg_name = name;
 	ret = pkgmgr_client_move(request->pc, request->pkg_name, move_type, request_event_handler, request);
 
-	if (ret < 0)
-	{
-		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
+	if (ret == PKGMGR_R_EINVAL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	} else if (ret == PKGMGR_R_ENOPKG) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+	} else if (ret == PKGMGR_R_ENOMEM) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	} else if (ret == PKGMGR_R_EIO) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	} else if (ret == PKGMGR_R_EPRIV) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__, NULL);
+	} else if (ret == PKGMGR_R_ESYSTEM || ret == PKGMGR_R_ECOMM || ret == PKGMGR_R_ERROR) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
 	}
-	else
-	{
-		return PACKAGE_MANAGER_ERROR_NONE;
-	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
 }
 int package_manager_create(package_manager_h * manager)
 {
+	int ret;
+
+	ret = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (ret != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(ret, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
 	struct package_manager_s *package_manager = NULL;
 
 	if (manager == NULL) {
@@ -555,7 +635,7 @@ int package_manager_create(package_manager_h * manager)
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
-static int package_manager_valiate_handle(package_manager_h manager)
+static int package_manager_validate_handle(package_manager_h manager)
 {
 	if (manager == NULL || manager->pc == NULL) {
 		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
@@ -566,7 +646,7 @@ static int package_manager_valiate_handle(package_manager_h manager)
 
 int package_manager_destroy(package_manager_h manager)
 {
-	if (package_manager_valiate_handle(manager)) {
+	if (package_manager_validate_handle(manager)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -753,7 +833,15 @@ int package_manager_set_event_cb(package_manager_h manager,
 				 package_manager_event_cb callback,
 				 void *user_data)
 {
-	if (package_manager_valiate_handle(manager)) {
+	int retval;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	if (package_manager_validate_handle(manager)) {
 		return
 		    package_manager_error
 		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
@@ -771,6 +859,10 @@ int package_manager_set_event_cb(package_manager_h manager,
 int package_manager_unset_event_cb(package_manager_h manager)
 {
 	// TODO: Please implement this function.
+	if (package_manager_validate_handle(manager)) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
@@ -781,15 +873,25 @@ int package_manager_get_package_id_by_app_id(const char *app_id, char **package_
 	char *pkg_id = NULL;
 	char *pkg_id_dup = NULL;
 
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	if (app_id == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
 	if (pkgmgrinfo_appinfo_get_appinfo(app_id, &pkgmgrinfo_appinfo) != PMINFO_R_OK)
 	{
-		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
 	}
 
 	retval = pkgmgrinfo_appinfo_get_pkgname(pkgmgrinfo_appinfo, &pkg_id);
 	if (retval != PMINFO_R_OK)
 	{
-		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
 	}
 
 	pkg_id_dup = strdup(pkg_id);
@@ -810,6 +912,12 @@ int package_manager_get_package_info(const char *package_id, package_info_h *pac
 {
 	int retval;
 
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
 	retval = package_info_get_package_info(package_id, package_info);
 
 	if (retval != PACKAGE_MANAGER_ERROR_NONE)
@@ -826,6 +934,12 @@ int package_manager_foreach_package_info(package_manager_package_info_cb callbac
 					void *user_data)
 {
 	int retval;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
 
 	retval = package_info_foreach_package_info(callback, user_data);
 
@@ -885,6 +999,12 @@ int package_manager_is_preload_package_by_app_id(const char *app_id, bool *prelo
 	char *pkg_id = NULL;
 	bool is_preload = 0;
 
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
 	if (pkgmgrinfo_appinfo_get_appinfo(app_id, &pkgmgrinfo_appinfo) != PMINFO_R_OK)
 	{
 		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
@@ -928,6 +1048,12 @@ int package_manager_get_permission_type(const char *app_id, package_manager_perm
 	pkgmgrinfo_appinfo_h pkgmgrinfo_appinfo =NULL;
 	pkgmgrinfo_permission_type permission = 0;
 
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
 	if (pkgmgrinfo_appinfo_get_appinfo(app_id, &pkgmgrinfo_appinfo) != PMINFO_R_OK)
 	{
 		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
@@ -950,4 +1076,321 @@ int package_manager_get_permission_type(const char *app_id, package_manager_perm
 
 	pkgmgrinfo_appinfo_destroy_appinfo(pkgmgrinfo_appinfo);
 	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_clear_cache_dir(const char *package_id)
+{
+	int res = pkgmgr_client_clear_cache_dir(package_id);
+	if (res == PKGMGR_R_EINVAL)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ENOPKG)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ENOMEM)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_EIO)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_EPRIV)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ESYSTEM || res == PKGMGR_R_ECOMM || res == PKGMGR_R_ERROR)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
+	else if (res != PKGMGR_R_OK)
+	{
+		_LOGE("Unexpected error");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_clear_all_cache_dir(void)
+{
+	return package_manager_clear_cache_dir(PKG_CLEAR_ALL_CACHE);
+}
+
+static void __free_data(gpointer data)
+{
+	if (data)
+	{
+		free(data);
+		data = NULL;
+	}
+}
+
+static void __initialize_cb_table(void)
+{
+	__cb_table = g_hash_table_new_full(g_int_hash, g_int_equal, __free_data, NULL);
+}
+
+static void __result_cb(pkgmgr_client *pc, const char *pkgid, const pkg_size_info_t *result, void *user_data)
+{
+	int key = (int *)pc;
+
+	package_manager_size_info_receive_cb callback = g_hash_table_lookup(__cb_table, &key);
+	if (callback == NULL)
+	{
+		_LOGE("callback is null.");
+		g_hash_table_remove(__cb_table, pc);
+		pkgmgr_client_free(pc);
+		return;
+	}
+
+	package_size_info_t size_info;
+	size_info.data_size  = result->data_size;
+	size_info.cache_size = result->cache_size;
+	size_info.app_size   = result->app_size;
+	size_info.external_data_size  = result->ext_data_size;
+	size_info.external_cache_size = result->ext_cache_size;
+	size_info.external_app_size   = result->ext_app_size;
+
+	callback(pkgid, &size_info, user_data);
+
+	g_hash_table_remove(__cb_table, pc);
+	pkgmgr_client_free(pc);
+}
+
+static void __total_result_cb(pkgmgr_client *pc, const pkg_size_info_t *result, void *user_data)
+{
+	int key = (int *)pc;
+
+	package_manager_total_size_info_receive_cb callback = g_hash_table_lookup(__cb_table, &key);
+	if (callback == NULL)
+	{
+		_LOGE("callback is null.");
+		g_hash_table_remove(__cb_table, pc);
+		pkgmgr_client_free(pc);
+		return;
+	}
+
+	package_size_info_t size_info;
+	size_info.data_size  = result->data_size;
+	size_info.cache_size = result->cache_size;
+	size_info.app_size   = result->app_size;
+	size_info.external_data_size  = result->ext_data_size;
+	size_info.external_cache_size = result->ext_cache_size;
+	size_info.external_app_size   = result->ext_app_size;
+
+	callback(&size_info, user_data);
+
+	g_hash_table_remove(__cb_table, pc);
+	pkgmgr_client_free(pc);
+}
+
+int package_manager_get_package_size_info(const char *package_id, package_manager_size_info_receive_cb callback, void *user_data)
+{
+	if (package_id == NULL || callback == NULL)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	if (__cb_table == NULL)
+	{
+		__initialize_cb_table();
+	}
+
+	pkgmgr_client *pc = pkgmgr_client_new(PC_REQUEST);
+	if (pc == NULL)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
+
+	int res = 0;
+	if (strcmp(package_id, PKG_SIZE_INFO_TOTAL) != 0)
+	{
+		res = pkgmgr_client_get_package_size_info(pc, package_id, __result_cb, user_data);
+	}
+	else
+	{
+		res = pkgmgr_client_get_total_package_size_info(pc, __total_result_cb, user_data);
+	}
+
+	if (res == PKGMGR_R_EINVAL)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ENOPKG)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ENOMEM)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_EIO)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_EPRIV)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__, NULL);
+	}
+	else if (res == PKGMGR_R_ESYSTEM || res == PKGMGR_R_ECOMM || res == PKGMGR_R_ERROR)
+	{
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
+	else if (res != PKGMGR_R_OK)
+	{
+		_LOGE("Unexpected error");
+		pkgmgr_client_free(pc);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_SYSTEM_ERROR, __FUNCTION__, NULL);
+	}
+
+	int *key = malloc(sizeof(int));
+	*key = pc;
+	g_hash_table_insert(__cb_table, key, callback);
+
+	_LOGD("Successful");
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_get_total_package_size_info(package_manager_total_size_info_receive_cb callback, void *user_data)
+{
+	return package_manager_get_package_size_info(PKG_SIZE_INFO_TOTAL, callback, user_data);
+}
+
+int package_manager_filter_create(package_manager_filter_h *handle)
+{
+	int retval;
+	package_manager_filter_h created_filter = NULL;
+	pkgmgrinfo_pkginfo_filter_h pkgmgr_filter = NULL;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	if (handle == NULL)
+	{
+		return
+		    package_manager_error
+		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
+		     NULL);
+	}
+
+	retval = pkgmgrinfo_pkginfo_filter_create(&pkgmgr_filter);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	created_filter = malloc(sizeof(struct package_manager_filter_s));
+	if (created_filter == NULL)
+	{
+		pkgmgrinfo_pkginfo_filter_destroy(pkgmgr_filter);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
+	}
+
+	created_filter->pkgmgrinfo_pkginfo_filter = pkgmgr_filter;
+
+	*handle = created_filter;
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_filter_destroy(package_manager_filter_h handle)
+{
+	int retval;
+
+	if (handle == NULL)
+	{
+		return
+		    package_manager_error
+		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
+		     NULL);
+	}
+
+	retval = pkgmgrinfo_pkginfo_filter_destroy(handle->pkgmgrinfo_pkginfo_filter);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	free(handle);
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+int package_manager_filter_add_bool(package_manager_filter_h handle,
+		const char *property, const bool value)
+{
+	int retval;
+
+	if ((handle == NULL) || (property == NULL))
+	{
+		return
+		    package_manager_error
+		    (PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
+		     NULL);
+	}
+
+	retval = pkgmgrinfo_pkginfo_filter_add_bool(handle->pkgmgrinfo_pkginfo_filter, property, value);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_filter_count(package_manager_filter_h handle, int *count)
+{
+	int retval = 0;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	if ((handle == NULL) || (count == NULL))
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	retval = pkgmgrinfo_pkginfo_filter_count(handle->pkgmgrinfo_pkginfo_filter, count);
+	if (retval < 0)
+	{
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_filter_foreach_package_info(package_manager_filter_h handle,
+		package_manager_package_info_cb callback, void *user_data)
+{
+	int retval;
+
+	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return package_manager_error(retval, __FUNCTION__,
+			 "failed to allow privilege");
+	}
+
+	retval = package_info_filter_foreach_package_info(handle->pkgmgrinfo_pkginfo_filter, callback, user_data);
+
+	if (retval != PACKAGE_MANAGER_ERROR_NONE)
+	{
+		return package_manager_error(retval, __FUNCTION__, NULL);
+	}
+	else
+	{
+		return PACKAGE_MANAGER_ERROR_NONE;
+	}
 }

@@ -1,6 +1,6 @@
 Name:       capi-appfw-package-manager
 Summary:    Package Manager API
-Version: 0.0.35
+Version:	0.0.49
 Release:    1
 Group:      API
 License:    Apache-2.0
@@ -57,8 +57,7 @@ cp LICENSE %{buildroot}/usr/share/license/%{name}
 /usr/share/license/%{name}
 
 %files devel
-%{_includedir}/appfw/package_manager.h
-%{_includedir}/appfw/package_info.h
+%{_includedir}/appfw/*.h
 %{_libdir}/libcapi-appfw-package-manager.so
 %{_libdir}/pkgconfig/*.pc
 

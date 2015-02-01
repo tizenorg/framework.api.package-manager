@@ -19,6 +19,7 @@ TARGETS = utc_ApplicationFW_package_manager_compare_app_cert_info \
 	utc_ApplicationFW_package_manager_request_unset_event_cb \
 	utc_ApplicationFW_package_manager_set_event_cb \
 	utc_ApplicationFW_package_manager_unset_event_cb \
+	utc_ApplicationFW_package_info_create \
 	utc_ApplicationFW_package_info_destroy \
 	utc_ApplicationFW_package_info_clone \
 	utc_ApplicationFW_package_info_foreach_app_from_package \

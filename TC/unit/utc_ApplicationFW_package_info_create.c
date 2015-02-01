@@ -28,8 +28,8 @@ static void cleanup(void);
 void (*tet_startup) (void) = startup;
 void (*tet_cleanup) (void) = cleanup;
 
-static void utc_ApplicationFW_package_manager_get_package_info_func_01(void);
-static void utc_ApplicationFW_package_manager_get_package_info_func_02(void);
+static void utc_ApplicationFW_package_info_create_func_01(void);
+static void utc_ApplicationFW_package_info_create_func_02(void);
 
 enum {
 	POSITIVE_TC_IDX = 0x01,
@@ -37,8 +37,8 @@ enum {
 };
 
 struct tet_testlist tet_testlist[] = {
-	{utc_ApplicationFW_package_manager_get_package_info_func_01, POSITIVE_TC_IDX},
-	{utc_ApplicationFW_package_manager_get_package_info_func_02, NEGATIVE_TC_IDX},
+	{utc_ApplicationFW_package_info_create_func_01, POSITIVE_TC_IDX},
+	{utc_ApplicationFW_package_info_create_func_02, NEGATIVE_TC_IDX},
 	{NULL, 0},
 };
 
@@ -51,15 +51,15 @@ static void cleanup(void)
 }
 
 /**
- * @brief Positive test case of package_manager_get_package_info()
+ * @brief Positive test case of package_info_create()
  */
-static void utc_ApplicationFW_package_manager_get_package_info_func_01(void)
+static void utc_ApplicationFW_package_info_create_func_01(void)
 {
 	int ret = 0;
 	package_info_h package_info;
 	char *pkgid = "com.samsung.dispcpuinfo";
 
-	ret = package_manager_get_package_info(pkgid, &package_info);
+	ret = package_info_create(pkgid, &package_info);
 	if (ret != 0) {
 		tet_infoline
 			("tc() failed in positive test case");
@@ -73,15 +73,15 @@ static void utc_ApplicationFW_package_manager_get_package_info_func_01(void)
 
 
 /**
- * @brief Negative test case of package_manager_get_package_info()
+ * @brief Negative test case of package_info_create()
  */
-static void utc_ApplicationFW_package_manager_get_package_info_func_02(void)
+static void utc_ApplicationFW_package_info_create_func_02(void)
 {
 	int ret = 0;
 	package_info_h package_info;
 	char *pkgid = NULL;
 
-	ret = package_manager_get_package_info(pkgid, &package_info);
+	ret = package_info_create(pkgid, &package_info);
 	if (ret != 0) {
 		tet_infoline
 		    ("tc() failed in positive test case");

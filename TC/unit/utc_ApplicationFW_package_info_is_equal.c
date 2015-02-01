@@ -69,8 +69,8 @@ static void utc_ApplicationFW_package_info_is_equal_func_01(void)
 
 	bool info;
 
-	package_manager_get_package_info(lpkgid, &lpackage_info);
-	package_manager_get_package_info(rpkgid, &rpackage_info);
+	package_info_create(lpkgid, &lpackage_info);
+	package_info_create(rpkgid, &rpackage_info);
 
 	ret = package_info_is_equal(lpackage_info, rpackage_info, &info);
 	if (ret != 0) {
@@ -101,8 +101,8 @@ static void utc_ApplicationFW_package_info_is_equal_func_02(void)
 
 	bool info;
 
-	package_manager_get_package_info(lpkgid, &lpackage_info);
-	package_manager_get_package_info(rpkgid, &rpackage_info);
+	package_info_create(lpkgid, &lpackage_info);
+	package_info_create(rpkgid, &rpackage_info);
 
 	ret = package_info_is_equal(lpackage_info, rpackage_info, &info);
 	if (ret != 0) {

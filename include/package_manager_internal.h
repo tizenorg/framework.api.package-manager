@@ -14,24 +14,23 @@
  * limitations under the License.
  */
 
-#ifndef __TIZEN_APPFW_PACKAGE_MANAGER_PRIVATE_H__
-#define __TIZEN_APPFW_PACKAGE_MANAGER_PRIVATE_H__
 
-#include <package_manager.h>
+#ifndef __TIZEN_APPFW_PACKAGE_MANAGER_INTERNAL_H__
+#define __TIZEN_APPFW_PACKAGE_MANAGER_INTERNAL_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int package_manager_error(package_manager_error_e error, const char* function, const char *description);
+typedef enum {
+	PRIVILEGE_PACKAGE_MANAGER_INFO,
+	PRIVILEGE_PACKAGE_MANAGER_ADMIN
+} privilege_type;
 
-int package_info_get_package_info(const char *package, package_info_h *package_info);
-
-int package_info_foreach_package_info(package_manager_package_info_cb callback,	void *user_data);
-
+int check_privilege(privilege_type type);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __TIZEN_APPFW_PACKAGE_MANAGER_PRIVATE_H__ */
+#endif /* __TIZEN_APPFW_PACKAGE_MANAGER_INTERNAL_H__ */

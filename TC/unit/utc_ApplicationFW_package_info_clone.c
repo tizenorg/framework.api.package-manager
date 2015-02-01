@@ -61,7 +61,7 @@ static void utc_ApplicationFW_package_info_clone_func_01(void)
 	package_info_h package_info;
 	package_info_h clone_info;
 
-	package_manager_get_package_info(pkgid, &package_info);
+	package_info_create(pkgid, &package_info);
 
 	ret = package_info_clone(&package_info, clone_info);
 	if (ret != 0) {

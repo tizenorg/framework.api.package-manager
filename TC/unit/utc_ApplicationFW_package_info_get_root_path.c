@@ -61,7 +61,7 @@ static void utc_ApplicationFW_package_info_get_root_path_func_01(void)
 	package_info_h package_info;
 	char *info;
 
-	package_manager_get_package_info(pkgid, &package_info);
+	package_info_create(pkgid, &package_info);
 
 	ret = package_info_get_root_path(package_info, &info);
 	if (ret != 0) {
