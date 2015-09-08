@@ -10,7 +10,7 @@ SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 SET(INC_DIR include)
 INCLUDE_DIRECTORIES(${INC_DIR})
 
-SET(requires "capi-base-common dlog vconf aul ail pkgmgr glib-2.0")
+SET(requires "capi-base-common dlog vconf aul ail pkgmgr pkgmgr-info")
 SET(pc_requires "capi-base-common")
 
 INCLUDE(FindPkgConfig)
@@ -19,7 +19,7 @@ FOREACH(flag ${${fw_name}_CFLAGS})
     SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
 ENDFOREACH(flag)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC -Wall -Werror")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC -Wall")
 SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
 
 IF("${ARCH}" STREQUAL "arm")
@@ -29,7 +29,7 @@ ENDIF("${ARCH}" STREQUAL "arm")
 ADD_DEFINITIONS("-DPREFIX=\"${CMAKE_INSTALL_PREFIX}\"")
 ADD_DEFINITIONS("-DSLP_DEBUG")
 
-SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--as-needed -Wl,--rpath=/usr/lib")
+SET(CMAKE_EXE_LINKER_FLAGS "-Wl,--as-needed -Wl,--rpath=${LIB_INSTALL_DIR}")
 
 aux_source_directory(src SOURCES)
 ADD_LIBRARY(${fw_name} SHARED ${SOURCES})
@@ -43,7 +43,7 @@ SET_TARGET_PROPERTIES(${fw_name}
      CLEAN_DIRECT_OUTPUT 1
 )
 
-INSTALL(TARGETS ${fw_name} DESTINATION lib)
+INSTALL(TARGETS ${fw_name} DESTINATION ${LIB_INSTALL_DIR})
 INSTALL(
         DIRECTORY ${INC_DIR}/ DESTINATION include/appfw
         FILES_MATCHING
@@ -61,7 +61,7 @@ CONFIGURE_FILE(
     ${CMAKE_CURRENT_SOURCE_DIR}/${fw_name}.pc
     @ONLY
 )
-INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/${fw_name}.pc DESTINATION lib/pkgconfig)
+INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/${fw_name}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 
 
 IF(UNIX)
@@ -95,3 +95,4 @@ ADD_CUSTOM_COMMAND(
 
 ENDIF(UNIX)
 
+add_subdirectory(tool)
