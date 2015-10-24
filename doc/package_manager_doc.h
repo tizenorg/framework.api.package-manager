@@ -49,6 +49,22 @@
  *
  */
 
+/**
+ * @ingroup CAPI_PACKAGE_MANAGER_MODULE
+ * @defgroup CAPI_PACKAGE_REQUEST_MODULE Package Manager Request
+ * @brief Package Manager Request API. It is responsible for installing, uninstalling, and moving packages, and storing their information.
+ *
+ * @section CAPI_PACKAGE_REQUEST_MODULE_HEADER Required Header
+ *   \#include <package_manager.h>
+ *
+ * @section CAPI_PACKAGE_REQUEST_MODULE_OVERVIEW Overview
+ * The Package Manager API provides functions to install and uninstall the package, and also provides event
+ * listening function. The package_manager_request_install() method is used to asynchronously install a package.
+ * Similarly, the package_manager_request_uninstall() and package_manager_request_move() methods are used to
+ * asynchronously uninstall a package. The callback function is called when the progress of the request changes.
+ * Use package_manager_request_event_cb() to listen to package installation related events.
+ */
+
 #endif /* __TIZEN_PACKAGE_MANAGER_DOC_H__ */
 
 

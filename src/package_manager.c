@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <glib.h>
+#include <gio/gio.h>
 #include <dlog.h>
 
 #include <package-manager.h>
@@ -24,6 +25,7 @@
 #include <pkgmgr-info.h>
 
 #include <package_manager_internal.h>
+#include <privilege_checker.h>
 
 #ifdef LOG_TAG
 #undef LOG_TAG
@@ -34,7 +36,27 @@
 #define _LOGE(fmt, arg...) LOGE(fmt,##arg)
 #define _LOGD(fmt, arg...) LOGD(fmt, ##arg)
 
+#define CAPI_PACKAGE_MANAGER_DBUS_SERVICE "org.tizen.pkgmgr"
+#define CAPI_PACKAGE_MANAGER_DBUS_PATH "/org/tizen/pkgmgr"
+#define CAPI_PACKAGE_MANAGER_DBUS_INTERFACE "org.tizen.pkgmgr"
+#define CAPI_PACKAGE_MANAGER_METHOD_DRM_GENERATE_LICENSE_REQUEST "DrmGenerateLicenseRequest"
+#define CAPI_PACKAGE_MANAGER_METHOD_DRM_REGISTER_LICNESE "DrmRegisterLicense"
+#define CAPI_PACKAGE_MANAGER_METHOD_DRM_DECRYPT_PACKAGE "DrmDecryptPackage"
+#define CAPI_PACKAGE_MANAGER_RETRY_MAX	3
+
+#define UNUSED(x) (void)(x)
+
+#define TIZEN_PRIVILEGE_PACKAGE_INFO "http://tizen.org/privilege/package.info"
+#define TIZEN_PRIVILEGE_PACKAGE_MANAGER_INSTALL "http://tizen.org/privilege/packagemanager.install"
+#define TIZEN_PRIVILEGE_PACKAGE_MANAGER_ADMIN "http://tizen.org/privilege/packagemanager.admin"
+#define TIZEN_PRIVILEGE_PACKAGE_MANAGER_INFO "http://tizen.org/privilege/packagemanager.info"
+
 static GHashTable *__cb_table = NULL;
+
+extern int package_info_get_package_info(const char *package, package_info_h *package_info);
+extern int package_info_foreach_package_info(package_manager_package_info_cb callback, void *user_data);
+extern int package_info_filter_foreach_package_info(pkgmgrinfo_pkginfo_filter_h handle, package_manager_package_info_cb callback, void *user_data);
+
 
 typedef struct _event_info {
 	int req_id;
@@ -64,7 +86,21 @@ struct package_manager_request_s {
 	event_info *head;
 	package_manager_request_event_cb event_cb;
 	void *user_data;
+#ifdef _APPFW_FEATURE_EXPANSION_PKG_INSTALL
+	const char *tep_path;
+	bool tep_move;
+#endif
 };
+
+typedef struct package_size_info
+{
+    long long data_size;
+    long long cache_size;
+    long long app_size;
+    long long external_data_size;
+    long long external_cache_size;
+    long long external_app_size;
+} package_size_info_t;
 
 struct package_manager_filter_s {
 	pkgmgrinfo_pkginfo_filter_h pkgmgrinfo_pkginfo_filter;
@@ -205,10 +241,9 @@ int package_manager_request_set_event_cb(package_manager_request_h request,
 {
 	int retval;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if (package_manager_client_validate_handle(request)) {
@@ -226,10 +261,12 @@ int package_manager_request_set_event_cb(package_manager_request_h request,
 
 int package_manager_request_unset_event_cb(package_manager_request_h request)
 {
-	// TODO: Please implement this function.
 	if (package_manager_client_validate_handle(request)) {
 		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
 	}
+
+	request->event_cb = NULL;
+	request->user_data = NULL;
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
@@ -268,6 +305,39 @@ int package_manager_request_set_mode(package_manager_request_h request,
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
+int package_manager_request_set_tep(package_manager_request_h request,
+				     const char *tep_path)
+{
+#ifdef _APPFW_FEATURE_EXPANSION_PKG_INSTALL
+	int retval = 0;
+
+	if (package_manager_client_validate_handle(request) || tep_path == NULL) {
+		return
+			package_manager_error
+			(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__,
+			 NULL);
+	}
+
+	retval = package_manager_admin_check_privilege();
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return retval;
+	}
+
+	if (request->tep_path)
+		free((void *)request->tep_path);
+
+	request->tep_path = strdup(tep_path);
+	request->tep_move = true;
+
+	if (request ->tep_path == NULL)
+		return PACKAGE_MANAGER_ERROR_SYSTEM_ERROR;
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+#else
+	return PACKAGE_MANAGER_ERROR_SYSTEM_ERROR;
+#endif
+}
+
 static int package_manager_get_event_type(const char *key,
 					  package_manager_event_type_e *
 					  event_type)
@@ -294,7 +364,7 @@ static int __add_event_info(event_info ** head, int req_id,
 	event_info *evt_info;
 	event_info *current;
 	event_info *prev;
-
+	UNUSED(event_state);
 	evt_info = (event_info *) calloc(1, sizeof(event_info));
 	if (evt_info == NULL) {
 		_LOGD("calloc failed");
@@ -324,6 +394,7 @@ static int __find_event_info(event_info ** head, int req_id,
 			     package_manager_event_state_e * event_state)
 {
 	event_info *tmp;
+	UNUSED(event_state);
 
 	tmp = *head;
 
@@ -409,6 +480,7 @@ static int request_event_handler(int req_id, const char *pkg_type,
 	package_manager_event_state_e event_state = -1;
 
 	_LOGD("request_event_handler is called");
+	UNUSED(pmsg);
 
 	package_manager_request_h request = data;
 
@@ -502,6 +574,15 @@ int package_manager_request_install(package_manager_request_h request,
 
 	int request_id = 0;
 	request->pkg_path = path;
+
+#ifdef _APPFW_FEATURE_EXPANSION_PKG_INSTALL
+	if (request->tep_path)
+		request_id = pkgmgr_client_install_with_tep(request->pc, request->pkg_type, NULL,
+				request->pkg_path, request->tep_path, request->tep_move, NULL,
+				request->mode, request_event_handler,
+				request);
+	else
+#endif
 	request_id = pkgmgr_client_install(request->pc, request->pkg_type, NULL,
 					   request->pkg_path, NULL,
 					   request->mode, request_event_handler,
@@ -593,12 +674,11 @@ int package_manager_request_move(package_manager_request_h request,
 }
 int package_manager_create(package_manager_h * manager)
 {
-	int ret;
+	int retval;
 
-	ret = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
-	if (ret != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(ret, __FUNCTION__,
-			 "failed to allow privilege");
+	retval = package_manager_info_check_privilege();
+	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
+		return retval;
 	}
 
 	struct package_manager_s *package_manager = NULL;
@@ -665,6 +745,7 @@ static int __add_event(event_info ** head, int req_id,
 			    package_manager_event_state_e event_state)
 {
 	event_info *evt_info;
+	UNUSED(event_state);
 
 	evt_info = (event_info *) calloc(1, sizeof(event_info));
 	if (evt_info == NULL) {
@@ -685,6 +766,8 @@ static int __find_event(event_info ** head, int req_id,
 			     package_manager_event_state_e * event_state)
 {
 	event_info *tmp;
+	UNUSED(event_state);
+	UNUSED(req_id);
 
 	tmp = *head;
 
@@ -729,6 +812,7 @@ static int global_event_handler(int req_id, const char *pkg_type,
 	int ret = -1;
 	package_manager_event_type_e event_type = -1;
 	package_manager_event_state_e event_state = -1;
+	UNUSED(pmsg);
 
 	_LOGD("global_event_handler is called");
 
@@ -835,11 +919,11 @@ int package_manager_set_event_cb(package_manager_h manager,
 {
 	int retval;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
+
 
 	if (package_manager_validate_handle(manager)) {
 		return
@@ -873,10 +957,9 @@ int package_manager_get_package_id_by_app_id(const char *app_id, char **package_
 	char *pkg_id = NULL;
 	char *pkg_id_dup = NULL;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if (app_id == NULL) {
@@ -912,10 +995,9 @@ int package_manager_get_package_info(const char *package_id, package_info_h *pac
 {
 	int retval;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	retval = package_info_get_package_info(package_id, package_info);
@@ -935,10 +1017,9 @@ int package_manager_foreach_package_info(package_manager_package_info_cb callbac
 {
 	int retval;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	retval = package_info_foreach_package_info(callback, user_data);
@@ -999,10 +1080,9 @@ int package_manager_is_preload_package_by_app_id(const char *app_id, bool *prelo
 	char *pkg_id = NULL;
 	bool is_preload = 0;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if (pkgmgrinfo_appinfo_get_appinfo(app_id, &pkgmgrinfo_appinfo) != PMINFO_R_OK)
@@ -1048,10 +1128,9 @@ int package_manager_get_permission_type(const char *app_id, package_manager_perm
 	pkgmgrinfo_appinfo_h pkgmgrinfo_appinfo =NULL;
 	pkgmgrinfo_permission_type permission = 0;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if (pkgmgrinfo_appinfo_get_appinfo(app_id, &pkgmgrinfo_appinfo) != PMINFO_R_OK)
@@ -1135,7 +1214,7 @@ static void __initialize_cb_table(void)
 
 static void __result_cb(pkgmgr_client *pc, const char *pkgid, const pkg_size_info_t *result, void *user_data)
 {
-	int key = (int *)pc;
+	int key = (int)pc;
 
 	package_manager_size_info_receive_cb callback = g_hash_table_lookup(__cb_table, &key);
 	if (callback == NULL)
@@ -1154,7 +1233,8 @@ static void __result_cb(pkgmgr_client *pc, const char *pkgid, const pkg_size_inf
 	size_info.external_cache_size = result->ext_cache_size;
 	size_info.external_app_size   = result->ext_app_size;
 
-	callback(pkgid, &size_info, user_data);
+	package_size_info_h size_info_h = (package_size_info_h)&size_info;
+	callback(pkgid, size_info_h, user_data);
 
 	g_hash_table_remove(__cb_table, pc);
 	pkgmgr_client_free(pc);
@@ -1162,7 +1242,7 @@ static void __result_cb(pkgmgr_client *pc, const char *pkgid, const pkg_size_inf
 
 static void __total_result_cb(pkgmgr_client *pc, const pkg_size_info_t *result, void *user_data)
 {
-	int key = (int *)pc;
+	int key = (int)pc;
 
 	package_manager_total_size_info_receive_cb callback = g_hash_table_lookup(__cb_table, &key);
 	if (callback == NULL)
@@ -1253,14 +1333,13 @@ int package_manager_get_package_size_info(const char *package_id, package_manage
 	}
 
 	int *key = malloc(sizeof(int));
-	if (key == NULL)
-	{
+	if (!key) {
 		_LOGE("out of memory");
 		pkgmgr_client_free(pc);
 		return package_manager_error(PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY, __FUNCTION__, NULL);
 	}
 
-	*key = pc;
+	*key = (int)pc;
 	g_hash_table_insert(__cb_table, key, callback);
 
 	_LOGD("Successful");
@@ -1269,7 +1348,7 @@ int package_manager_get_package_size_info(const char *package_id, package_manage
 
 int package_manager_get_total_package_size_info(package_manager_total_size_info_receive_cb callback, void *user_data)
 {
-	return package_manager_get_package_size_info(PKG_SIZE_INFO_TOTAL, callback, user_data);
+	return package_manager_get_package_size_info(PKG_SIZE_INFO_TOTAL, (package_manager_size_info_receive_cb)callback, user_data);
 }
 
 int package_manager_filter_create(package_manager_filter_h *handle)
@@ -1278,10 +1357,9 @@ int package_manager_filter_create(package_manager_filter_h *handle)
 	package_manager_filter_h created_filter = NULL;
 	pkgmgrinfo_pkginfo_filter_h pkgmgr_filter = NULL;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if (handle == NULL)
@@ -1359,10 +1437,9 @@ int package_manager_filter_count(package_manager_filter_h handle, int *count)
 {
 	int retval = 0;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	if ((handle == NULL) || (count == NULL))
@@ -1384,10 +1461,9 @@ int package_manager_filter_foreach_package_info(package_manager_filter_h handle,
 {
 	int retval;
 
-	retval = check_privilege(PRIVILEGE_PACKAGE_MANAGER_INFO);
+	retval = package_manager_info_check_privilege();
 	if (retval != PACKAGE_MANAGER_ERROR_NONE) {
-		return package_manager_error(retval, __FUNCTION__,
-			 "failed to allow privilege");
+		return retval;
 	}
 
 	retval = package_info_filter_foreach_package_info(handle->pkgmgrinfo_pkginfo_filter, callback, user_data);
@@ -1401,3 +1477,536 @@ int package_manager_filter_foreach_package_info(package_manager_filter_h handle,
 		return PACKAGE_MANAGER_ERROR_NONE;
 	}
 }
+
+int package_size_info_get_data_size(package_size_info_h handle, long long *data_size)
+{
+	if (handle == NULL)
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+
+	*data_size = (long long)size_info->data_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_size_info_get_cache_size(package_size_info_h handle, long long *cache_size)
+{
+	if (handle == NULL)
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+
+	*cache_size = size_info->cache_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_size_info_get_app_size(package_size_info_h handle, long long *app_size)
+{
+	if (handle == NULL)
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+	*app_size = size_info->app_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_size_info_get_external_data_size(package_size_info_h handle, long long *ext_data_size)
+{
+	if (handle == NULL)
+		return PACKAGE_MANAGER_ERROR_INVALID_PARAMETER;
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+	*ext_data_size = size_info->external_data_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_size_info_get_external_cache_size(package_size_info_h handle, long long *ext_cache_size)
+{
+	if (handle == NULL)
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+	*ext_cache_size = size_info->external_cache_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_size_info_get_external_app_size(package_size_info_h handle, long long *ext_app_size)
+{
+	if (handle == NULL)
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+
+	package_size_info_t *size_info = (package_size_info_t *)handle;
+	*ext_app_size = size_info->external_app_size;
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+static char *__get_cookie_from_security_server(void)
+{
+	int ret = 0;
+	size_t cookie_size = 0;
+	char *e_cookie = NULL;
+
+	//calculage cookie size
+	cookie_size = security_server_get_cookie_size();
+	if (cookie_size <= 0) {
+		_LOGE("failed to get cookie size");
+		return NULL;
+	}
+
+	//get cookie from security server
+	char cookie[cookie_size];
+	cookie[0] = '\0';
+	ret = security_server_request_cookie(cookie, cookie_size);
+	if (ret < 0) {
+		_LOGE("failed to get cookie");
+		return NULL;
+	}
+
+	//encode cookie
+	e_cookie = g_base64_encode((const guchar *)cookie, cookie_size);
+	if (e_cookie == NULL) {
+		_LOGE("failed to encode cookie");
+		return NULL;
+	}
+
+	return e_cookie;
+}
+
+static int __package_manager_drm_generate_license_request(const char *resp_data, char **req_data, char **license_url)
+{
+	_LOGE("__package_manager_drm_generate_license_request is called.");
+
+	if (resp_data == NULL || req_data == NULL || license_url == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	int ret = -1;
+	GDBusConnection *bus = NULL;
+	GDBusMessage *message = NULL;
+	GDBusMessage *reply = NULL;
+	GVariant *body = NULL;
+	GError *error = NULL;
+	char *req_data_tmp = NULL;
+	char *license_url_tmp = NULL;
+	char *cookie = NULL;
+
+	_LOGE("send event to pkgmgr server");
+
+	bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+	if (bus == NULL) {
+		_LOGE("g_bus_get_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_bus_get_sync is OK.");
+
+	message = g_dbus_message_new_method_call(CAPI_PACKAGE_MANAGER_DBUS_SERVICE,
+			CAPI_PACKAGE_MANAGER_DBUS_PATH,
+			CAPI_PACKAGE_MANAGER_DBUS_INTERFACE,
+			CAPI_PACKAGE_MANAGER_METHOD_DRM_GENERATE_LICENSE_REQUEST);
+
+	if (message == NULL) {
+		_LOGE("g_dbus_message_new_method_call is failed.");
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_dbus_message_new_method_call is OK.");
+
+	cookie = __get_cookie_from_security_server();
+	if (cookie == NULL) {
+		_LOGE("__get_cookie_from_security_server is NULL");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	g_dbus_message_set_body(message, g_variant_new("(ss)", resp_data, cookie));
+	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, -1, NULL, NULL, &error);
+	if (reply == NULL) {
+		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		g_object_unref(message);
+		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+		goto catch;
+	}
+
+	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
+
+	body = g_dbus_message_get_body(reply);
+	if (body != NULL) {
+		_LOGE("g_dbus_message_get_body is OK.");
+		g_variant_get(body, "(ssi)", &req_data_tmp, &license_url_tmp, &ret);
+	} else {
+		_LOGE("body is NULL.");
+	}
+
+	g_dbus_connection_flush_sync(bus, NULL, NULL);
+	g_object_unref(message);
+
+	if (ret != 0) {
+		_LOGE("drm_tizen_generate_license_request is failed.");
+		if (ret == -5)
+			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
+		else
+			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+		goto catch;
+	}
+
+	*req_data = strdup(req_data_tmp);
+	*license_url = strdup(license_url_tmp);
+
+	g_object_unref(reply);
+
+	_LOGE("__package_manager_drm_generate_license_request is successful.");
+
+catch:
+	if (cookie)
+		g_free(cookie);
+
+	if (ret != PACKAGE_MANAGER_ERROR_NONE)
+		return package_manager_error(ret, __FUNCTION__, NULL);
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_drm_generate_license_request(const char *resp_data, char **req_data, char **license_url)
+{
+	int ret = -1;
+	int retry_cnt = 0;
+
+	_LOGE("package_manager_drm_generate_license_request is called.");
+
+	ret = __package_manager_drm_generate_license_request(resp_data, req_data, license_url);
+
+	while (ret != PACKAGE_MANAGER_ERROR_NONE) {
+		_LOGE("sleep and retry. ret is [%d].", ret);
+		sleep(1);
+
+		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
+			_LOGE("retry_cnt is max. stop retry.");
+			return package_manager_error(ret, __FUNCTION__, NULL);
+		}
+
+		retry_cnt++;
+
+		ret = __package_manager_drm_generate_license_request(resp_data, req_data, license_url);
+		if (ret == PACKAGE_MANAGER_ERROR_NONE) {
+			_LOGE("retry is successful. retry_cnt is [%d].", retry_cnt);
+			break;
+		}
+	}
+
+	_LOGE("package_manager_drm_generate_license_request is successful.");
+
+	return ret;
+}
+
+static int __package_manager_drm_register_license(const char *resp_data)
+{
+	_LOGE("__package_manager_drm_register_license is called.");
+
+	if (resp_data == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	int ret = -1;
+	GDBusConnection *bus = NULL;
+	GDBusMessage *message = NULL;
+	GDBusMessage *reply = NULL;
+	GVariant *body = NULL;
+	GError *error = NULL;
+	char *cookie = NULL;
+
+	_LOGE("send event to pkgmgr server");
+
+	bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+	if (bus == NULL) {
+		_LOGE("g_bus_get_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_bus_get_sync is OK.");
+
+	message = g_dbus_message_new_method_call(CAPI_PACKAGE_MANAGER_DBUS_SERVICE,
+            CAPI_PACKAGE_MANAGER_DBUS_PATH,
+            CAPI_PACKAGE_MANAGER_DBUS_INTERFACE,
+            CAPI_PACKAGE_MANAGER_METHOD_DRM_REGISTER_LICNESE);
+
+	if (message == NULL) {
+		_LOGE("g_dbus_message_new_method_call is failed.");
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_dbus_message_new_method_call is OK.");
+
+	cookie = __get_cookie_from_security_server();
+	if (cookie == NULL) {
+		_LOGE("__get_cookie_from_security_server is NULL");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	g_dbus_message_set_body(message, g_variant_new("(ss)", resp_data, cookie));
+	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, -1, NULL, NULL, &error);
+	if (reply == NULL) {
+		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		g_object_unref(message);
+		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+		goto catch;
+	}
+
+	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
+
+	body = g_dbus_message_get_body(reply);
+	if (body != NULL) {
+		_LOGE("g_dbus_message_get_body is OK.");
+		g_variant_get(body, "(i)", &ret);
+	} else {
+		_LOGE("body is NULL.");
+	}
+
+	g_dbus_connection_flush_sync(bus, NULL, NULL);
+	g_object_unref(message);
+	g_object_unref(reply);
+
+	if (ret != 0) {
+		_LOGE("drm_tizen_register_license is failed.");
+		if (ret == -5)
+			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
+		else
+			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+	} else
+		_LOGE("__package_manager_drm_register_license is successful.");
+
+catch:
+	if (cookie)
+		g_free(cookie);
+
+	if (ret != PACKAGE_MANAGER_ERROR_NONE)
+		return package_manager_error(ret, __FUNCTION__, NULL);
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_drm_register_license(const char *resp_data)
+{
+	int ret = -1;
+	int retry_cnt = 0;
+
+	_LOGE("package_manager_drm_register_license is called.");
+
+	ret = __package_manager_drm_register_license(resp_data);
+
+	while (ret != PACKAGE_MANAGER_ERROR_NONE) {
+		_LOGE("sleep and retry. ret is [%d].", ret);
+		sleep(1);
+
+		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
+			_LOGE("retry_cnt is max. stop retry.");
+			return package_manager_error(ret, __FUNCTION__, NULL);
+		}
+
+		retry_cnt++;
+
+		ret = __package_manager_drm_register_license(resp_data);
+		if (ret == PACKAGE_MANAGER_ERROR_NONE) {
+			_LOGE("retry is successful. retry_cnt is [%d].", retry_cnt);
+			break;
+		}
+	}
+
+	_LOGE("package_manager_drm_register_license is successful.");
+
+	return ret;
+}
+
+static int __package_manager_drm_decrypt_package(const char *drm_file_path, const char *decrypted_file_path)
+{
+	_LOGE("__package_manager_drm_decrypt_package is called.");
+
+	if (drm_file_path == NULL || decrypted_file_path == NULL) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_INVALID_PARAMETER, __FUNCTION__, NULL);
+	}
+
+	int ret = -1;
+	GDBusConnection *bus = NULL;
+	GDBusMessage *message = NULL;
+	GDBusMessage *reply = NULL;
+	GVariant *body = NULL;
+	GError *error = NULL;
+	char *cookie = NULL;
+
+	_LOGE("send event to pkgmgr server");
+
+	bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+	if (bus == NULL) {
+		_LOGE("g_bus_get_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_bus_get_sync is OK.");
+
+	message = g_dbus_message_new_method_call(CAPI_PACKAGE_MANAGER_DBUS_SERVICE,
+            CAPI_PACKAGE_MANAGER_DBUS_PATH,
+            CAPI_PACKAGE_MANAGER_DBUS_INTERFACE,
+            CAPI_PACKAGE_MANAGER_METHOD_DRM_DECRYPT_PACKAGE);
+
+	if (message == NULL) {
+		_LOGE("g_dbus_message_new_method_call is failed.");
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	_LOGE("g_dbus_message_new_method_call is OK.");
+
+	cookie = __get_cookie_from_security_server();
+	if (cookie == NULL) {
+		_LOGE("__get_cookie_from_security_server is NULL");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
+
+	g_dbus_message_set_body(message, g_variant_new("(sss)", drm_file_path, decrypted_file_path, cookie));
+	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, G_MAXINT, NULL, NULL, &error);
+	if (reply == NULL) {
+		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
+		if (error != NULL) {
+			_LOGE("error message.[%s]", error->message);
+			g_error_free(error);
+			error = NULL;
+		}
+		g_dbus_connection_flush_sync(bus, NULL, NULL);
+		g_object_unref(message);
+		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+		goto catch;
+	}
+
+	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
+
+	body = g_dbus_message_get_body(reply);
+	if (body != NULL) {
+		_LOGE("g_dbus_message_get_body is OK.");
+		g_variant_get(body, "(i)", &ret);
+	} else {
+		_LOGE("body is NULL.");
+	}
+
+	g_dbus_connection_flush_sync(bus, NULL, NULL);
+	g_object_unref(message);
+	g_object_unref(reply);
+
+	if (ret != 0) {
+		_LOGE("drm_tizen_decrypt_package is failed. ret is [%d].", ret);
+		if (ret == -5)
+			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
+		else
+			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
+	} else
+		_LOGE("__package_manager_drm_decrypt_package is successful.");
+
+catch:
+	if (cookie)
+		g_free(cookie);
+
+	if (ret != PACKAGE_MANAGER_ERROR_NONE)
+		return package_manager_error(ret, __FUNCTION__, NULL);
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_drm_decrypt_package(const char *drm_file_path, const char *decrypted_file_path)
+{
+	int ret = -1;
+	int retry_cnt = 0;
+
+	_LOGE("package_manager_drm_decrypt_package is called.");
+
+	ret = __package_manager_drm_decrypt_package(drm_file_path, decrypted_file_path);
+
+	while (ret != PACKAGE_MANAGER_ERROR_NONE) {
+		_LOGE("sleep and retry. ret is [%d].", ret);
+		sleep(1);
+
+		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
+			_LOGE("retry_cnt is max. stop retry.");
+			return package_manager_error(ret, __FUNCTION__, NULL);
+		}
+
+		retry_cnt++;
+
+		ret = __package_manager_drm_decrypt_package(drm_file_path, decrypted_file_path);
+		if (ret == PACKAGE_MANAGER_ERROR_NONE) {
+			_LOGE("retry is successful. retry_cnt is [%d].", retry_cnt);
+			break;
+		}
+	}
+
+	_LOGE("package_manager_drm_decrypt_package is successful.");
+
+	return ret;
+}
+
+int package_manager_info_check_privilege()
+{
+	int retval;
+
+	retval = privilege_checker_check_privilege(TIZEN_PRIVILEGE_PACKAGE_INFO);
+	if (retval != PRIVILEGE_CHECKER_ERR_NONE) {
+		_LOGD("%s is not declared. This might be native application", TIZEN_PRIVILEGE_PACKAGE_INFO);
+	} else {
+		return PACKAGE_MANAGER_ERROR_NONE;
+	}
+
+	retval = privilege_checker_check_privilege(TIZEN_PRIVILEGE_PACKAGE_MANAGER_INFO);
+	if (retval != PRIVILEGE_CHECKER_ERR_NONE) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__,
+				"failed to allow privilege");
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+
+int package_manager_admin_check_privilege()
+{
+	int retval;
+
+	retval = privilege_checker_check_privilege(TIZEN_PRIVILEGE_PACKAGE_MANAGER_INSTALL);
+	if (retval != PRIVILEGE_CHECKER_ERR_NONE) {
+		_LOGD("%s is not declared. This might be native application", TIZEN_PRIVILEGE_PACKAGE_MANAGER_INSTALL);
+	} else {
+		return PACKAGE_MANAGER_ERROR_NONE;
+	}
+
+	retval = privilege_checker_check_privilege(TIZEN_PRIVILEGE_PACKAGE_MANAGER_ADMIN);
+	if (retval != PRIVILEGE_CHECKER_ERR_NONE) {
+		return package_manager_error(PACKAGE_MANAGER_ERROR_PERMISSION_DENIED, __FUNCTION__,
+				"failed to allow privilege");
+	}
+
+	return PACKAGE_MANAGER_ERROR_NONE;
+}
+

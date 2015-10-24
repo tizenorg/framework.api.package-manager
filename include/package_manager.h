@@ -100,16 +100,6 @@ typedef enum {
 } package_manager_event_state_e;
 
 /**
- * @internal
- * @brief Enumeration for request mode.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- */
-typedef enum {
-    PACKAGE_MANAGER_REQUEST_MODE_DEFAULT = 0,    /**< @internal Default request mode */
-    PACKAGE_MANAGER_REQUEST_MODE_QUIET,          /**< @internal Quiet request mode */
-} package_manager_request_mode_e;
-
-/**
  * @brief Enumeration for move type.
  * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
  */
@@ -166,217 +156,6 @@ typedef struct package_manager_s *package_manager_h;
  * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
  */
 typedef struct package_manager_filter_s *package_manager_filter_h;
-
-/**
- * @internal
- * @brief The Package manager request handle.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- */
-typedef struct package_manager_request_s *package_manager_request_h;
-
-/**
- * @internal
- * @brief Called when the progress of the request to the package manager changes.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @param[in] id          The ID of the request to the package manager
- * @param[in] type        The type of the package to install, uninstall or update
- * @param[in] package     The name of the package to install, uninstall or update
- * @param[in] event_type  The type of the request to the package manager
- * @param[in] event_state The current state of the request to the package manager
- * @param[in] progress    The progress for the request that is being processed by the package manager \n
- *                        The range of progress is from @c 0 to @c 100.
- * @param[in] error       The error code when the package manager failed to process the request
- * @param[in] user_data   The user data passed from package_manager_request_set_event_cb()
- *
- * @see package_manager_request_set_event_cb()
- * @see package_manager_request_unset_event_cb()
- */
-typedef void (*package_manager_request_event_cb) (
-            int id,
-            const char *type,
-            const char *package,
-            package_manager_event_type_e event_type,
-            package_manager_event_state_e event_state,
-            int progress,
-            package_manager_error_e error,
-            void *user_data);
-
-/**
- * @internal
- * @brief Creates a request handle to the package manager.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @remarks You must release @a request using package_manager_request_destroy().
- *
- * @param[out] request The request handle that is newly created on success
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- * @retval #PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY     Out of memory
- * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
- *
- * @see package_manager_request_destroy()
- */
-int package_manager_request_create(package_manager_request_h *request);
-
-/**
- * @internal
- * @brief Destroys the request handle to the package manager.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @param[in] request The request handle to the package manager
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- *
- * @see package_manager_request_create()
- */
-int package_manager_request_destroy(package_manager_request_h request);
-
-/**
- * @internal
- * @brief Registers a callback function to be invoked when the progress of the request changes.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- * @privlevel public
- * @privilege %http://tizen.org/privilege/packagemanager.info
- * @param[in] request The request handle
- * @param[in] callback The callback function to be registered
- * @param[in] user_data The user data to be passed to the callback function
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
- * @post package_manager_request_event_cb() will be invoked.
- *
- * @see package_manager_request_event_cb()
- * @see package_manager_request_unset_event_cb()
- */
-int package_manager_request_set_event_cb(package_manager_request_h request,
-                     package_manager_request_event_cb callback, void *user_data);
-
-/**
- * @internal
- * @brief Unregisters the callback function.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @param[in] request The request handle
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- *
- * @see package_manager_request_event_cb()
- * @see package_manager_request_set_event_cb()
- */
-int package_manager_request_unset_event_cb(package_manager_request_h request);
-
-/**
- * @internal
- * @brief Sets the type of the package to install, uninstall or update.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @param[in] request The request handle
- * @param[in] type    The type of the package
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- */
-int package_manager_request_set_type(package_manager_request_h request,
-                     const char *type);
-
-/**
- * @internal
- * @brief Sets the mode of the request.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- *
- * @param[in] request The request handle
- * @param[in] mode    The mode of the request
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- */
-int package_manager_request_set_mode(package_manager_request_h request,
-                     package_manager_request_mode_e mode);
-
-/**
- * @internal
- * @brief Installs the package located at the given path.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- * @privlevel platform
- * @privilege %http://tizen.org/privilege/packagemanager.admin
- * @param[in]  request The request handle
- * @param[in]  path    The absolute path to the package to be installed
- * @param[out] id      The ID of the request to the package manager
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
- * @see package_manager_request_uninstall()
- */
-int package_manager_request_install(package_manager_request_h request,
-                    const char *path, int *id);
-
-/**
- * @internal
- * @brief Uninstalls the package with the given name.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- * @privlevel platform
- * @privilege %http://tizen.org/privilege/packagemanager.admin
- * @param[in]  request The request handle
- * @param[in]  name    The name of the package to be uninstalled
- * @param[out] id      The ID of the request to the package manager
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
- */
-int package_manager_request_uninstall(package_manager_request_h request,
-                      const char *name, int *id);
-
-/**
- * @internal
- * @brief Moves the package from SD card to the internal memory and vice versa.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- * @privlevel platform
- * @privilege %http://tizen.org/privilege/packagemanager.admin
- * @param[in] request   The request handle
- * @param[in] name      The name of the package to be moved
- * @param[in] move_type The move type [enum package_manager_move_type_e], [external to internal/internal to external]
- *
- * @return @c 0 on success,
- *         otherwise a negative error value
- *
- * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
- * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
- * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
- */
-int package_manager_request_move(package_manager_request_h request,
-                    const char *name, package_manager_move_type_e move_type);
-
 
 /**
  * @brief Called when the package is installed, uninstalled or updated, and the progress of the request to the package manager changes.
@@ -474,6 +253,7 @@ int package_manager_set_event_status(package_manager_h manager, int status_type)
  *
  * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
  * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
  * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
  * @post package_manager_event_cb() will be invoked.
  *
@@ -531,6 +311,7 @@ typedef bool (*package_manager_package_info_cb) (
  *
  * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
  * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
  * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
  * @post This function invokes package_manager_package_info_cb() repeatedly for each package information.
  *
@@ -553,6 +334,7 @@ int package_manager_foreach_package_info(package_manager_package_info_cb callbac
  * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
  * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
  * @retval #PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
  * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
  */
 int package_manager_get_package_id_by_app_id(const char *app_id, char **package_id);
@@ -656,14 +438,13 @@ int package_manager_is_preload_package_by_app_id(const char *app_id, bool *prelo
 int package_manager_get_permission_type(const char *app_id, package_manager_permission_type_e *permission_type);
 
 /**
- * @internal
  * @brief  Clears the application's internal and external cache directory.
  * @details All files stored in the cache directory of the application specified with the
  *          package ID are removed.
  *
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
- * @privlevel platform
- * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @since_tizen 2.4
+ * @privlevel public
+ * @privilege %http://tizen.org/privilege/packagemanager.clearcache
  *
  * @param[in] package_id  The package ID
  *
@@ -681,7 +462,7 @@ int package_manager_get_permission_type(const char *app_id, package_manager_perm
 int package_manager_clear_cache_dir(const char *package_id);
 
 /**
- * @internal
+ * @platform
  * @brief  Clears all applications' internal and external cache directory.
  * @details All files stored in the cache directory of each application are removed.
  *
@@ -703,50 +484,38 @@ int package_manager_clear_cache_dir(const char *package_id);
 int package_manager_clear_all_cache_dir(void);
 
 /**
- * @internal
- * @brief  The structure type for data structure for the package size information.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @brief  The handle for the package size information.
+ * @since_tizen 2.4
  */
-typedef struct package_size_info
-{
-    long long data_size;            /**< The size of files in the application's internal data directory */
-    long long cache_size;           /**< The size of files in the application's internal cache directory */
-    long long app_size;             /**< The size of files in the application's internal bin, lib, and
-                                         res directories */
-    long long external_data_size;   /**< The size of files in the application's external data directory */
-    long long external_cache_size;  /**< The size of files in the application's external cache directory */
-    long long external_app_size;    /**< The size of files in the application's res directory */
-} package_size_info_t;
+typedef struct package_size_info *package_size_info_h;
 
 /**
- * @internal
  * @brief  Called when the package size information is obtained.
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @since_tizen 2.4
  *
  * @param[in]  package_id  The package ID
  * @param[in]  size_info   The pointer to the structure including the package size information
  * @param[in]  user_data   The user data to be passed to the callback function
  */
-typedef void (*package_manager_size_info_receive_cb)(const char *package_id, const package_size_info_t *size_info, void *user_data);
+typedef void (*package_manager_size_info_receive_cb)(const char *package_id, const package_size_info_h size_info, void *user_data);
 
 /**
- * @internal
+ * @platform
  * @brief  Called when the total package size information is obtained.
  * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
  *
  * @param[in]  size_info  The pointer to the structure including the package size information
  * @param[in]  user_data  The user data to be passed to the callback function
  */
-typedef void (*package_manager_total_size_info_receive_cb)(const package_size_info_t *size_info, void *user_data);
+typedef void (*package_manager_total_size_info_receive_cb)(const package_size_info_h size_info, void *user_data);
 
 /**
- * @internal
  * @brief  Gets the package size information.
  * @details The package size info is asynchronously obtained by the callback function.
  * @privlevel public
  * @privilege %http://tizen.org/privilege/packagemanager.info
  *
- * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @since_tizen 2.4
  *
  * @param[in]  package_id  The package ID
  * @param[in]  callback    The asynchronous callback function to get the package size information
@@ -766,7 +535,7 @@ typedef void (*package_manager_total_size_info_receive_cb)(const package_size_in
 int package_manager_get_package_size_info(const char *package_id, package_manager_size_info_receive_cb callback, void *user_data);
 
 /**
- * @internal
+ * @platform
  * @brief  Gets the total package size information.
  * @details The total package size info is asynchronously obtained by the callback function.
  * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
@@ -895,6 +664,406 @@ int package_manager_filter_count(package_manager_filter_h handle, int *count);
  */
 int package_manager_filter_foreach_package_info(package_manager_filter_h handle,
 		package_manager_package_info_cb callback, void *user_data);
+
+/**
+ * @platform
+ * @brief Generates request for getting License
+ * @since_tizen 2.4
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in] resp_data The response data string of the purchase request
+ * @param[out] req_data	License request data
+ * @param[out] license_url	License acquisition url data
+ * @remarks You must release @a req_data and @a license_url by yourself.
+ * @return 0 on success, otherwise a negative error value
+ * @retval #PACKAGE_MANAGER_ERROR_NONE Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY Out of memory
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR Internal I/O error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ * @post package_manager_drm_register_license
+ */
+int package_manager_drm_generate_license_request(const char *resp_data, char **req_data, char **license_url);
+
+/**
+ * @platform
+ * @brief Registers encrypted license
+ * @since_tizen 2.4
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in] resp_data The response data string of the rights request
+ * @return 0 on success, otherwise a negative error value
+ * @retval #PACKAGE_MANAGER_ERROR_NONE Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR Internal I/O error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ * @pre package_manager_drm_generate_license_request
+ */
+int package_manager_drm_register_license(const char *resp_data);
+
+/**
+ * @platform
+ * @brief Decrypts contents which is encrypted
+ * @since_tizen 2.4
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in] drm_file_path DRM file path
+ * @param[in] decrypted_file_path Decrypted file path
+ * @return 0 on success, otherwise a negative error value
+ * @retval #PACKAGE_MANAGER_ERROR_NONE Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR Internal I/O error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ */
+int package_manager_drm_decrypt_package(const char *drm_file_path, const char *decrypted_file_path);
+
+/**
+ * @brief  Retrieves data size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] data_size  Data size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_data_size(package_size_info_h handle, long long *data_size);
+
+/**
+ * @brief  Retrieves cache size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] cache_size  Cache size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_cache_size(package_size_info_h handle, long long *cache_size);
+
+/**
+ * @brief  Retrieves application size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] app_size  App size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_app_size(package_size_info_h handle, long long *app_size);
+
+/**
+ * @brief  Retrieves external data size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] ext_data_size  External data size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_external_data_size(package_size_info_h handle, long long *ext_data_size);
+
+
+/**
+ * @brief  Retrieves external cache size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] ext_cache_size  External cache size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_external_cache_size(package_size_info_h handle, long long *ext_cache_size);
+
+
+/**
+ * @brief  Retrieves external application size from given handle
+ *
+ * @since_tizen 2.4
+ *
+ * @param[in] handle  Package size info handle
+ * @param[out] ext_app_size  External app size will be returned
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_size_info_get_external_app_size(package_size_info_h handle, long long *ext_app_size);
+
+/**
+* @}
+*/
+
+/**
+ * @addtogroup CAPI_PACKAGE_REQUEST_MODULE
+ * @{
+ */
+
+/**
+ * @platform
+ * @brief Enumeration for request mode.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ */
+typedef enum {
+    PACKAGE_MANAGER_REQUEST_MODE_DEFAULT = 0,    /**< @platform Default request mode */
+    PACKAGE_MANAGER_REQUEST_MODE_QUIET,          /**< @platform Quiet request mode */
+} package_manager_request_mode_e;
+
+/**
+ * @platform
+ * @brief The Package manager request handle.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ */
+typedef struct package_manager_request_s *package_manager_request_h;
+
+/**
+ * @platform
+ * @brief Called when the progress of the request to the package manager changes.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @param[in] id          The ID of the request to the package manager
+ * @param[in] type        The type of the package to install, uninstall or update
+ * @param[in] package     The name of the package to install, uninstall or update
+ * @param[in] event_type  The type of the request to the package manager
+ * @param[in] event_state The current state of the request to the package manager
+ * @param[in] progress    The progress for the request that is being processed by the package manager \n
+ *                        The range of progress is from @c 0 to @c 100.
+ * @param[in] error       The error code when the package manager failed to process the request
+ * @param[in] user_data   The user data passed from package_manager_request_set_event_cb()
+ *
+ * @see package_manager_request_set_event_cb()
+ * @see package_manager_request_unset_event_cb()
+ */
+typedef void (*package_manager_request_event_cb) (
+            int id,
+            const char *type,
+            const char *package,
+            package_manager_event_type_e event_type,
+            package_manager_event_state_e event_state,
+            int progress,
+            package_manager_error_e error,
+            void *user_data);
+
+/**
+ * @platform
+ * @brief Creates a request handle to the package manager.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @remarks You must release @a request using package_manager_request_destroy().
+ *
+ * @param[out] request The request handle that is newly created on success
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY     Out of memory
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
+ *
+ * @see package_manager_request_destroy()
+ */
+int package_manager_request_create(package_manager_request_h *request);
+
+/**
+ * @platform
+ * @brief Destroys the request handle to the package manager.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @param[in] request The request handle to the package manager
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ *
+ * @see package_manager_request_create()
+ */
+int package_manager_request_destroy(package_manager_request_h request);
+
+/**
+ * @platform
+ * @brief Registers a callback function to be invoked when the progress of the request changes.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @privlevel public
+ * @privilege %http://tizen.org/privilege/packagemanager.info
+ * @param[in] request The request handle
+ * @param[in] callback The callback function to be registered
+ * @param[in] user_data The user data to be passed to the callback function
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ * @post package_manager_request_event_cb() will be invoked.
+ *
+ * @see package_manager_request_event_cb()
+ * @see package_manager_request_unset_event_cb()
+ */
+int package_manager_request_set_event_cb(package_manager_request_h request,
+                     package_manager_request_event_cb callback, void *user_data);
+
+/**
+ * @platform
+ * @brief Unregisters the callback function.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @param[in] request The request handle
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ *
+ * @see package_manager_request_event_cb()
+ * @see package_manager_request_set_event_cb()
+ */
+int package_manager_request_unset_event_cb(package_manager_request_h request);
+
+/**
+ * @platform
+ * @brief Sets the type of the package to install, uninstall or update.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @param[in] request The request handle
+ * @param[in] type    The type of the package
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_manager_request_set_type(package_manager_request_h request,
+                     const char *type);
+
+/**
+ * @platform
+ * @brief Sets the mode of the request.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ *
+ * @param[in] request The request handle
+ * @param[in] mode    The mode of the request
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ */
+int package_manager_request_set_mode(package_manager_request_h request,
+                     package_manager_request_mode_e mode);
+
+/**
+ * @platform
+ * @brief Sets the path of TEP file to the request. The TEP file that is set will be installed when the package is installed.
+ * @since_tizen 2.4
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in] request The request handle
+ * @param[in] tep_path The tep path to set. If this is NULL on update, installed tep will be removed.
+ * @return 0 on success, otherwise a negative error value
+ * @retval #PACKAGE_MANAGER_ERROR_NONE Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR          Internal I/O error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ * @retval #PACKAGE_MANAGER_ERROR_SYSTEM_ERROR		 Severe system error
+ */
+int package_manager_request_set_tep(package_manager_request_h request,
+                     const char *tep_path);
+
+/**
+ * @platform
+ * @brief Installs the package located at the given path.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in]  request The request handle
+ * @param[in]  path    The absolute path to the package to be installed
+ * @param[out] id      The ID of the request to the package manager
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ * @see package_manager_request_uninstall()
+ */
+int package_manager_request_install(package_manager_request_h request,
+                    const char *path, int *id);
+
+/**
+ * @platform
+ * @brief Uninstalls the package with the given name.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in]  request The request handle
+ * @param[in]  name    The name of the package to be uninstalled
+ * @param[out] id      The ID of the request to the package manager
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ */
+int package_manager_request_uninstall(package_manager_request_h request,
+                      const char *name, int *id);
+
+/**
+ * @platform
+ * @brief Moves the package from SD card to the internal memory and vice versa.
+ * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @param[in] request   The request handle
+ * @param[in] name      The name of the package to be moved
+ * @param[in] move_type The move type [enum package_manager_move_type_e], [external to internal/internal to external]
+ *
+ * @return @c 0 on success,
+ *         otherwise a negative error value
+ *
+ * @retval #PACKAGE_MANAGER_ERROR_NONE              Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ */
+int package_manager_request_move(package_manager_request_h request,
+                    const char *name, package_manager_move_type_e move_type);
+
+
 
 /**
 * @}

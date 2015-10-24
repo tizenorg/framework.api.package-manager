@@ -9,10 +9,10 @@ BuildRequires:  cmake
 BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(pkgmgr)
 BuildRequires:  pkgconfig(pkgmgr-info)
-BuildRequires:  pkgconfig(ail)
 BuildRequires:	pkgconfig(vconf)
 BuildRequires:	pkgconfig(aul)
 BuildRequires:  pkgconfig(capi-base-common)
+BuildRequires:  pkgconfig(security-privilege-checker)
 
 %description
 The Package Manager API provides functions to install, uninstall the package,
@@ -27,6 +27,13 @@ Requires: %{name} = %{version}-%{release}
 The Package Manager API provides functions to install, uninstall the package,
 and also privides event listening function. (DEV)
 
+%define appfw_feature_expansion_pkg_install 0
+
+%if 0%{?appfw_feature_expansion_pkg_install}
+_EXPANSION_PKG_INSTALL=ON
+%else
+_EXPANSION_PKG_INSTALL=OFF
+%endif
 
 %prep
 %setup -q
@@ -34,7 +41,7 @@ and also privides event listening function. (DEV)
 
 %build
 MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
-%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER}
+%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -D_APPFW_FEATURE_EXPANSION_PKG_INSTALL:BOOL=ON
 
 make %{?jobs:-j%jobs}
 

@@ -22,13 +22,10 @@
 extern "C" {
 #endif
 
-typedef enum {
-	PRIVILEGE_PACKAGE_MANAGER_INFO,
-	PRIVILEGE_PACKAGE_MANAGER_ADMIN
-} privilege_type;
+int package_manager_error(package_manager_error_e error, const char *function, const char *description);
 
-int check_privilege(privilege_type type);
-
+int package_manager_info_check_privilege();
+int package_manager_admin_check_privilege();
 #ifdef __cplusplus
 }
 #endif

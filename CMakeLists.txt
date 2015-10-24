@@ -10,7 +10,11 @@ SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 SET(INC_DIR include)
 INCLUDE_DIRECTORIES(${INC_DIR})
 
-SET(requires "capi-base-common dlog vconf aul ail pkgmgr pkgmgr-info")
+IF(_APPFW_FEATURE_EXPANSION_PKG_INSTALL)
+	ADD_DEFINITIONS("-D_APPFW_FEATURE_EXPANSION_PKG_INSTALL")
+ENDIF(_APPFW_FEATURE_EXPANSION_PKG_INSTALL)
+
+SET(requires "capi-base-common dlog vconf aul pkgmgr pkgmgr-info security-privilege-checker")
 SET(pc_requires "capi-base-common")
 
 INCLUDE(FindPkgConfig)
@@ -19,7 +23,7 @@ FOREACH(flag ${${fw_name}_CFLAGS})
     SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
 ENDFOREACH(flag)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC -Wall")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC -Wall -Wextra -Wshadow")
 SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
 
 IF("${ARCH}" STREQUAL "arm")

@@ -31,7 +31,7 @@
 
 #include <package_manager.h>
 
-
+#define UNUSED(x) (void)x
 
 static void _print_help(const char *cmd)
 {
@@ -49,7 +49,8 @@ static bool _cert_info_cb(package_info_h handle, package_cert_type_e cert_type,
 						const char *cert_value, void *user_data)
 {
 	fprintf(stderr, "cert_info[%d] \t= [%s]\n", cert_type, cert_value);
-
+	UNUSED(user_data);
+	UNUSED(handle);
 	return true;
 }
 
@@ -114,14 +115,15 @@ static int _get_appinfo(const char *appid)
 	int ret = 0;
 	char *package_id = NULL;
 	ret = package_manager_get_package_id_by_app_id(appid, &package_id);
-	if (ret < 0)
+	if (ret < 0) {
 		fprintf(stderr, "package_manager_get_package_id_by_app_id fail \n");
+		return PACKAGE_MANAGER_ERROR_NO_SUCH_PACKAGE;
+	}
 
 	fprintf(stderr, "app_id \t= [%s]\n", appid);
 	fprintf(stderr, "package_id \t= [%s]\n", package_id);
 
-	if (package_id)
-		free(package_id);
+	free(package_id);
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }

@@ -293,6 +293,25 @@ int package_info_get_installed_storage(package_info_h package_info, package_info
 int package_info_get_root_path(package_info_h package_info, char **path);
 
 /**
+ * @platform
+ * @brief Gets the name of the TEP(Tizen Expansion Package).
+ * @since_tizen 2.4
+ * @privlevel platform
+ * @privilege %http://tizen.org/privilege/packagemanager.admin
+ * @remarks name must be released using free().
+ * @param[in] package_info The package information
+ * @param[out] name The name of the tep
+ * @return 0 on success, otherwise a negative error value
+ * @retval #PACKAGE_MANAGER_ERROR_NONE Successful
+ * @retval #PACKAGE_MANAGER_ERROR_INVALID_PARAMETER Invalid parameter
+ * @retval #PACKAGE_MANAGER_ERROR_OUT_OF_MEMORY Out of memory
+ * @retval #PACKAGE_MANAGER_ERROR_IO_ERROR IO error
+ * @retval #PACKAGE_MANAGER_ERROR_SYSTEM_ERROR		 Severe system error
+ * @retval #PACKAGE_MANAGER_ERROR_PERMISSION_DENIED Permission denied
+ */
+int package_info_get_tep_name (package_info_h package_info, char **name);
+
+/**
  * @brief Checks whether the package is system package.
  * @since_tizen @if MOBILE 2.3 @elseif WEARABLE 2.3.1 @endif
  *
