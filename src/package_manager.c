@@ -1540,38 +1540,6 @@ int package_size_info_get_external_app_size(package_size_info_h handle, long lon
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
 
-static char *__get_cookie_from_security_server(void)
-{
-	int ret = 0;
-	size_t cookie_size = 0;
-	char *e_cookie = NULL;
-
-	//calculage cookie size
-	cookie_size = security_server_get_cookie_size();
-	if (cookie_size <= 0) {
-		_LOGE("failed to get cookie size");
-		return NULL;
-	}
-
-	//get cookie from security server
-	char cookie[cookie_size];
-	cookie[0] = '\0';
-	ret = security_server_request_cookie(cookie, cookie_size);
-	if (ret < 0) {
-		_LOGE("failed to get cookie");
-		return NULL;
-	}
-
-	//encode cookie
-	e_cookie = g_base64_encode((const guchar *)cookie, cookie_size);
-	if (e_cookie == NULL) {
-		_LOGE("failed to encode cookie");
-		return NULL;
-	}
-
-	return e_cookie;
-}
-
 static int __package_manager_drm_generate_license_request(const char *resp_data, char **req_data, char **license_url)
 {
 	_LOGE("__package_manager_drm_generate_license_request is called.");
@@ -1588,7 +1556,6 @@ static int __package_manager_drm_generate_license_request(const char *resp_data,
 	GError *error = NULL;
 	char *req_data_tmp = NULL;
 	char *license_url_tmp = NULL;
-	char *cookie = NULL;
 
 	_LOGE("send event to pkgmgr server");
 
@@ -1618,13 +1585,7 @@ static int __package_manager_drm_generate_license_request(const char *resp_data,
 
 	_LOGE("g_dbus_message_new_method_call is OK.");
 
-	cookie = __get_cookie_from_security_server();
-	if (cookie == NULL) {
-		_LOGE("__get_cookie_from_security_server is NULL");
-		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
-	}
-
-	g_dbus_message_set_body(message, g_variant_new("(ss)", resp_data, cookie));
+	g_dbus_message_set_body(message, g_variant_new("(s)", resp_data));
 	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, -1, NULL, NULL, &error);
 	if (reply == NULL) {
 		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
@@ -1635,8 +1596,7 @@ static int __package_manager_drm_generate_license_request(const char *resp_data,
 		}
 		g_dbus_connection_flush_sync(bus, NULL, NULL);
 		g_object_unref(message);
-		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-		goto catch;
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 	}
 
 	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
@@ -1654,11 +1614,7 @@ static int __package_manager_drm_generate_license_request(const char *resp_data,
 
 	if (ret != 0) {
 		_LOGE("drm_tizen_generate_license_request is failed.");
-		if (ret == -5)
-			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
-		else
-			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-		goto catch;
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 	}
 
 	*req_data = strdup(req_data_tmp);
@@ -1667,13 +1623,6 @@ static int __package_manager_drm_generate_license_request(const char *resp_data,
 	g_object_unref(reply);
 
 	_LOGE("__package_manager_drm_generate_license_request is successful.");
-
-catch:
-	if (cookie)
-		g_free(cookie);
-
-	if (ret != PACKAGE_MANAGER_ERROR_NONE)
-		return package_manager_error(ret, __FUNCTION__, NULL);
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
@@ -1693,7 +1642,7 @@ int package_manager_drm_generate_license_request(const char *resp_data, char **r
 
 		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
 			_LOGE("retry_cnt is max. stop retry.");
-			return package_manager_error(ret, __FUNCTION__, NULL);
+			return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 		}
 
 		retry_cnt++;
@@ -1724,7 +1673,6 @@ static int __package_manager_drm_register_license(const char *resp_data)
 	GDBusMessage *reply = NULL;
 	GVariant *body = NULL;
 	GError *error = NULL;
-	char *cookie = NULL;
 
 	_LOGE("send event to pkgmgr server");
 
@@ -1754,13 +1702,7 @@ static int __package_manager_drm_register_license(const char *resp_data)
 
 	_LOGE("g_dbus_message_new_method_call is OK.");
 
-	cookie = __get_cookie_from_security_server();
-	if (cookie == NULL) {
-		_LOGE("__get_cookie_from_security_server is NULL");
-		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
-	}
-
-	g_dbus_message_set_body(message, g_variant_new("(ss)", resp_data, cookie));
+	g_dbus_message_set_body(message, g_variant_new("(s)", resp_data));
 	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, -1, NULL, NULL, &error);
 	if (reply == NULL) {
 		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
@@ -1771,8 +1713,7 @@ static int __package_manager_drm_register_license(const char *resp_data)
 		}
 		g_dbus_connection_flush_sync(bus, NULL, NULL);
 		g_object_unref(message);
-		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-		goto catch;
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 	}
 
 	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
@@ -1791,19 +1732,10 @@ static int __package_manager_drm_register_license(const char *resp_data)
 
 	if (ret != 0) {
 		_LOGE("drm_tizen_register_license is failed.");
-		if (ret == -5)
-			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
-		else
-			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-	} else
-		_LOGE("__package_manager_drm_register_license is successful.");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
 
-catch:
-	if (cookie)
-		g_free(cookie);
-
-	if (ret != PACKAGE_MANAGER_ERROR_NONE)
-		return package_manager_error(ret, __FUNCTION__, NULL);
+	_LOGE("__package_manager_drm_register_license is successful.");
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
@@ -1823,7 +1755,7 @@ int package_manager_drm_register_license(const char *resp_data)
 
 		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
 			_LOGE("retry_cnt is max. stop retry.");
-			return package_manager_error(ret, __FUNCTION__, NULL);
+			return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 		}
 
 		retry_cnt++;
@@ -1854,7 +1786,6 @@ static int __package_manager_drm_decrypt_package(const char *drm_file_path, cons
 	GDBusMessage *reply = NULL;
 	GVariant *body = NULL;
 	GError *error = NULL;
-	char *cookie = NULL;
 
 	_LOGE("send event to pkgmgr server");
 
@@ -1884,13 +1815,7 @@ static int __package_manager_drm_decrypt_package(const char *drm_file_path, cons
 
 	_LOGE("g_dbus_message_new_method_call is OK.");
 
-	cookie = __get_cookie_from_security_server();
-	if (cookie == NULL) {
-		_LOGE("__get_cookie_from_security_server is NULL");
-		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
-	}
-
-	g_dbus_message_set_body(message, g_variant_new("(sss)", drm_file_path, decrypted_file_path, cookie));
+	g_dbus_message_set_body(message, g_variant_new("(ss)", drm_file_path, decrypted_file_path));
 	reply = g_dbus_connection_send_message_with_reply_sync(bus, message, G_DBUS_SEND_MESSAGE_FLAGS_NONE, G_MAXINT, NULL, NULL, &error);
 	if (reply == NULL) {
 		_LOGE("g_dbus_connection_send_message_with_reply_sync is failed.");
@@ -1901,8 +1826,7 @@ static int __package_manager_drm_decrypt_package(const char *drm_file_path, cons
 		}
 		g_dbus_connection_flush_sync(bus, NULL, NULL);
 		g_object_unref(message);
-		ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-		goto catch;
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 	}
 
 	_LOGE("g_dbus_connection_send_message_with_reply_sync is OK.");
@@ -1921,19 +1845,10 @@ static int __package_manager_drm_decrypt_package(const char *drm_file_path, cons
 
 	if (ret != 0) {
 		_LOGE("drm_tizen_decrypt_package is failed. ret is [%d].", ret);
-		if (ret == -5)
-			ret = PACKAGE_MANAGER_ERROR_PERMISSION_DENIED;
-		else
-			ret = PACKAGE_MANAGER_ERROR_IO_ERROR;
-	} else
-		_LOGE("__package_manager_drm_decrypt_package is successful.");
+		return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
+	}
 
-catch:
-	if (cookie)
-		g_free(cookie);
-
-	if (ret != PACKAGE_MANAGER_ERROR_NONE)
-		return package_manager_error(ret, __FUNCTION__, NULL);
+	_LOGE("__package_manager_drm_decrypt_package is successful.");
 
 	return PACKAGE_MANAGER_ERROR_NONE;
 }
@@ -1953,7 +1868,7 @@ int package_manager_drm_decrypt_package(const char *drm_file_path, const char *d
 
 		if (retry_cnt == CAPI_PACKAGE_MANAGER_RETRY_MAX) {
 			_LOGE("retry_cnt is max. stop retry.");
-			return package_manager_error(ret, __FUNCTION__, NULL);
+			return package_manager_error(PACKAGE_MANAGER_ERROR_IO_ERROR, __FUNCTION__, NULL);
 		}
 
 		retry_cnt++;
